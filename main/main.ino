@@ -20,21 +20,24 @@ Timer t;
 int LED_PIN = 13;
 int MP3_BUSY_PIN = 12;
 
-int MP3_VOLUME = 15;
+int MP3_VOLUME = 10;
 
-const int CLASH_THRESHOLD = 400;
-const int SWING_THRESHOLD = 140;
+const int CLASH_THRESHOLD = 220;
+const int SWING_THRESHOLD = 70;
 
 char str[1024];
-int playSound = 1;
+int playingSound = 0;
 
 SoftwareSerial SerialMP3(4, 5); // RX, TX
 
-// mp3/0001.mp3 = poweron
-// mp3/0002.mp3 = poweroff
-// mp3/0003.mp3 = hum
-// mp3/0004.mp3 = swing
-// mp3/0005.mp3 = clash
+// mp3/0001.wav = poweron
+// mp3/0002.wav = poweroff
+// mp3/0003.wav = hum
+// mp3/0004.wav = swing
+// mp3/0005.wav = clash
+
+// advert/0004.wav = swing
+// advert/0005.wav = clash
 
 void fireLED() {
   digitalWrite(LED_PIN, HIGH);
@@ -50,13 +53,12 @@ void setupMP3() {
   pinMode(MP3_BUSY_PIN, INPUT);
   SerialMP3.begin(9600);
   mp3_set_serial(SerialMP3);
-  delay(10);
   mp3_set_volume(MP3_VOLUME);
   delay(10);
 //  mp3_set_EQ(5);
   mp3_play(1);
-  delay(1200);
-  mp3_repeat_play(3);
+  delay(1500);
+  mp3_repeat_play(5);
 }
 
 void setupLED() {
@@ -65,7 +67,8 @@ void setupLED() {
 }
 
 bool checkDiff(int threshold) {
-  if (XAxisValueDiff > threshold || YAxisValueDiff > threshold || ZAxisValueDiff > threshold) {
+  if (XAxisValueDiff > threshold && YAxisValueDiff > threshold && ZAxisValueDiff > threshold) {
+//  if (XAxisValueDiff > threshold || YAxisValueDiff > threshold || ZAxisValueDiff > threshold) {
     sprintf(str, "threshold=%d, X=%d, Y=%d, Z=%d", threshold, XAxisValueDiff, YAxisValueDiff, ZAxisValueDiff);
     Serial.println(str);
     return true;
@@ -74,9 +77,8 @@ bool checkDiff(int threshold) {
   }
 }
 
-void resetplaySound() {
-  playSound = 1;
-  mp3_repeat_play(3);
+void resetplayingSound() {
+  playingSound = 0;
 }
 
 void setup() {
@@ -103,25 +105,23 @@ void loop() {
 //  sprintf(str, "X=%d (%d), Y=%d (%d), Z=%d (%d)", XAxisValue, XAxisValueDiff, YAxisValue, YAxisValueDiff, ZAxisValue, ZAxisValueDiff);
 //  Serial.println(str);
 
-  if (playSound) {
-    if (checkDiff(CLASH_THRESHOLD)) {
-      playSound = 0;
-      Serial.println("CLASH!");
-      mp3_play(5);
-      t.after(1000, resetplaySound);
-    } else if (checkDiff(SWING_THRESHOLD)) {
-      playSound = 0;
-      Serial.println("SWING");
-      mp3_play(4);
-      t.after(800, resetplaySound);
-    }
+  if (playingSound != 1 && checkDiff(CLASH_THRESHOLD)) {
+    Serial.println("CLASH!");
+    mp3_advert_play(5);
+    playingSound = 1;
+    t.after(1000, resetplayingSound);
+  } else if (playingSound == 0 && checkDiff(SWING_THRESHOLD)) {
+    Serial.println("SWING");
+    mp3_advert_play(4);
+    playingSound = 2;
+    t.after(100, resetplayingSound);
   }
   
   XAxisValueLast = XAxisValue;
   YAxisValueLast = YAxisValue;
   ZAxisValueLast = ZAxisValue;
 
-  delay(100);
+  delay(50);
 
   t.update();
 }
