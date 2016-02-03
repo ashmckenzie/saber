@@ -2,9 +2,6 @@
 #include <DFPlayer_Mini_Mp3.h>
 #include "Timer.h"
 
-const int xAxis = A0;
-const int yAxis = A1;
-const int zAxis = A2;
 int XAxisValue = 0;
 int YAxisValue = 0;
 int ZAxisValue = 0;
@@ -15,57 +12,43 @@ int XAxisValueDiff = 0;
 int YAxisValueDiff = 0;
 int ZAxisValueDiff = 0;
 
-Timer t;
+//Timer t;
 
-int LED_PIN = 13;
-int SERIAL_RX_PIN = 4;
-int SERIAL_TX_PIN = 5;
-int MP3_BUSY_PIN = 12;
-int POWER_ON_OFF_PIN = 8;
-int SELECT_SOUND_FONT_PIN = 9;
+// PINS
+//
+const int LED_PIN = 13;
+const int SERIAL_RX_PIN = 4;
+const int SERIAL_TX_PIN = 5;
+const int XAXIS_PIN = A0;
+const int YAXIS_PIN = A1;
+const int ZAXIS_PIN = A2;
+const int MP3_BUSY_PIN = 12;
+const int POWER_ON_OFF_PIN = 8;
+const int SELECT_SOUND_FONT_PIN = 9;
 
-int MP3_VOLUME = 5;
+/* ------------------------------------------------------------------------------------------------------------------------------------------------------- */
 
-const int MAX_SOUND_FONT_FOLDERS = 2;
-const int SOUNDS_PER_SOUND_FONT_FOLDER = 6;
+// TUNABLES
+//
+const int SOUND_VOLUME = 5;
 
-const int CLASH_THRESHOLD = 300;
-const int SWING_THRESHOLD = 20;
+const int CLASH_THRESHOLD = 400;
+const int SWING_THRESHOLD = 30;
 
 const int MOVEMENT_COUNT_THRESHOLD = 4;
 
 const int DEFAULT_DELAY_FOR_SABER_OFF = 250;
-const int DEFAULT_DELAY_FOR_SABER_ON = 10;
+const int DEFAULT_DELAY_FOR_SABER_ON = 20;
 const int POWER_STATE_COUNT_THRESHOLD_WHEN_ON = 30;
 const int POWER_STATE_COUNT_THRESHOLD_WHEN_OFF = 1;
 
-const int BOOT_SOUND_NUM = 1;
-const int POWER_ON_SOUND_NUM = 2;
-const int POWER_OFF_SOUND_NUM = 3;
-const int HUM_SOUND_NUM = 4;
-const int SWING_SOUND_NUM = 5;
-const int CLASH_SOUND_NUM = 6;
+// TOGGLES
+//
+const bool PLAY_BOOT_SOUND = true;
+const bool PLAY_POWER_ON_OFF_SOUND = true;
+const bool PLAY_MOVEMENT_SOUNDS = true;
 
-char str[1024];
-
-int currentSoundFontFolder = 0;
-
-int movementCount = 0;
-
-int playBootSound = 1;
-int playPowerSounds = 1;
-int playMovementSounds = 1;
-
-int saberOn = 0;
-bool playingSound = false;
-int powerButtonState = 0;
-int powerButtonStateCount = 0;
-int powerButtonStateCountThreshold = POWER_STATE_COUNT_THRESHOLD_WHEN_OFF;
-int delayFor = DEFAULT_DELAY_FOR_SABER_OFF;
-
-int selectSoundFontButtonState = 0;
-int selectSoundFontButtonStateCount = 0;
-int selectSoundFontButtonStateCountThreshold = 6;
+/* ------------------------------------------------------------------------------------------------------------------------------------------------------- */
 
 // Black Star
 //
@@ -76,21 +59,45 @@ int selectSoundFontButtonStateCountThreshold = 6;
 // 5 - swing
 // 6 - clash
 
-// EP IV
+// EP VI
 //
 // 7  - boot
 // 8  - power on
 // 9  - power off
-// 10  - hum
+// 10 - hum
 // 11 - swing
 // 12 - clash
+
+const int MAX_SOUND_FONT_FOLDERS = 2;
+const int SOUNDS_PER_SOUND_FONT_FOLDER = 6;
+const int BOOT_SOUND_NUM = 1;
+const int POWER_ON_SOUND_NUM = 2;
+const int POWER_OFF_SOUND_NUM = 3;
+const int HUM_SOUND_NUM = 4;
+const int SWING_SOUND_NUM = 5;
+const int CLASH_SOUND_NUM = 6;
+
+char str[1024];
+
+int currentSoundFontFolder = 0;
+int movementCount = 0;
+bool saberOn = false;
+bool playingSound = false;
+int powerButtonState = 0;
+int powerButtonStateCount = 0;
+int powerButtonStateCountThreshold = POWER_STATE_COUNT_THRESHOLD_WHEN_OFF;
+int delayFor = DEFAULT_DELAY_FOR_SABER_OFF;
+
+int selectSoundFontButtonState = 0;
+int selectSoundFontButtonStateCount = 0;
+int selectSoundFontButtonStateCountThreshold = 6;
 
 SoftwareSerial SerialMP3(SERIAL_RX_PIN, SERIAL_TX_PIN);
 
 void selectSoundFont(int num) {
   if (num >= MAX_SOUND_FONT_FOLDERS) { num = 0; }
   currentSoundFontFolder = num;
-  if (playBootSound) { playSound(BOOT_SOUND_NUM, 1890); }
+  if (PLAY_BOOT_SOUND) { playSound(BOOT_SOUND_NUM, 1890); }
 }
 
 void fireLED() {
@@ -112,7 +119,7 @@ void setupMP3() {
   mp3_set_device(1);
   delay(10);
   
-  mp3_set_volume(MP3_VOLUME);
+  mp3_set_volume(SOUND_VOLUME);
   delay(10);
   
   mp3_set_EQ(5);
@@ -177,10 +184,11 @@ void playMovementSound(int num, int d) {
     Serial.println(str);
   }
 
-  if (playMovementSounds) {
+  if (PLAY_MOVEMENT_SOUNDS) {
     playingSound = true;
     playSound(num, 0);  
-    t.after(d, resetplayingSound);
+//    t.after(d, resetplayingSound);
+    delay(d);
   }
 }
 
@@ -196,20 +204,20 @@ void processPowerButton() {
     if (powerButtonStateCount >= powerButtonStateCountThreshold) {      
       if (saberOn) {
         // Turn OFF
-        saberOn = 0;
+        saberOn = false;
         delayFor = DEFAULT_DELAY_FOR_SABER_OFF;
         powerButtonStateCountThreshold = POWER_STATE_COUNT_THRESHOLD_WHEN_OFF;
-        if (playPowerSounds) {
+        if (PLAY_POWER_ON_OFF_SOUND) {
           playSound(POWER_OFF_SOUND_NUM, 1000);
           mp3_stop();
         }
         if (!Serial.available()) { Serial.println("Power OFF!"); }
       } else {
         // Turn ON
-        saberOn = 1;        
+        saberOn = true;        
         delayFor = DEFAULT_DELAY_FOR_SABER_ON;
         powerButtonStateCountThreshold = POWER_STATE_COUNT_THRESHOLD_WHEN_ON;        
-        if (playPowerSounds) {
+        if (PLAY_POWER_ON_OFF_SOUND) {
           playSound(POWER_ON_SOUND_NUM, 1000);
           repeatHum();
         }
@@ -253,9 +261,9 @@ void processMovements() {
 }
 
 void captureAccelerometerValues() {
-  XAxisValue = analogRead(xAxis);
-  YAxisValue = analogRead(yAxis);
-  ZAxisValue = analogRead(zAxis);
+  XAxisValue = analogRead(XAXIS_PIN);
+  YAxisValue = analogRead(YAXIS_PIN);
+  ZAxisValue = analogRead(ZAXIS_PIN);
 }
 
 /* ------------------------------------------------------------------------------------------------------------------------------------------------------- */
@@ -291,5 +299,5 @@ void loop() {
   ZAxisValueLast = ZAxisValue;
   
   delay(delayFor);
-  t.update();
+//  t.update();
 }
