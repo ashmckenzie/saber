@@ -1,7 +1,6 @@
 #include <SoftwareSerial.h>
 #include <DFPlayer_Mini_Mp3.h>
 #include <EEPROM.h>
-#include "Timer.h"
 
 int XAxisValue = 0;
 int YAxisValue = 0;
@@ -12,8 +11,6 @@ int ZAxisValueLast = 0;
 int XAxisValueDiff = 0;
 int YAxisValueDiff = 0;
 int ZAxisValueDiff = 0;
-
-//Timer t;
 
 // PINS
 //
@@ -33,11 +30,11 @@ const int SELECT_SOUND_FONT_PIN = 9;
 //
 const int SOUND_VOLUME = 5;
 
-const int CLASH_THRESHOLD = 110;
-const int SWING_THRESHOLD = 40;
+const int SWING_THRESHOLD = 25;
+const int SWING_MOVEMENT_COUNT_THRESHOLD = 3;
 
-const int SWING_MOVEMENT_COUNT_THRESHOLD = 4;
-const int CLASH_MOVEMENT_COUNT_THRESHOLD = 4;
+const int CLASH_THRESHOLD = 45;
+const int CLASH_MOVEMENT_COUNT_THRESHOLD = 2;
 
 const int DEFAULT_DELAY_FOR_SABER_OFF = 250;
 const int DEFAULT_DELAY_FOR_SABER_ON = 10;
@@ -194,7 +191,6 @@ void playMovementSound(int num, int d) {
   if (PLAY_MOVEMENT_SOUNDS) {
     playingMovementSound = true;
     playSound(num, 0);  
-//    t.after(d, resetplayingMovementSound);
     delay(d);
     
     resetplayingMovementSound();
@@ -209,7 +205,7 @@ void resetplayingMovementSound() {
 void repeatHum() {
   int humSound = HUM_SOUND_NUM + (SOUNDS_PER_SOUND_FONT_FOLDER * currentSoundFontFolder);
   mp3_stop();
-  delay(50);
+  delay(30);
   mp3_repeat_play(humSound);
 }
 
@@ -266,10 +262,10 @@ void processMovements() {
   if (ZAxisValueLast > 0) { ZAxisValueDiff = abs(ZAxisValueLast - ZAxisValue); }
 
   if (!playingMovementSound) {
-    if (checkForMovement(CLASH_THRESHOLD, 5, CLASH_MOVEMENT_COUNT_THRESHOLD)) {
+    if (checkForMovement(CLASH_THRESHOLD, 1, CLASH_MOVEMENT_COUNT_THRESHOLD)) {
       if (!Serial.available()) { Serial.println("CLASH!"); }
       playMovementSound(CLASH_SOUND_NUM, 1060);
-    } else if (checkForMovement(SWING_THRESHOLD, 3, SWING_MOVEMENT_COUNT_THRESHOLD)) {
+    } else if (checkForMovement(SWING_THRESHOLD, 1, SWING_MOVEMENT_COUNT_THRESHOLD)) {
       if (!Serial.available()) { Serial.println("SWING"); }
        playMovementSound(SWING_SOUND_NUM, 600);      
     }
@@ -315,5 +311,4 @@ void loop() {
   ZAxisValueLast = ZAxisValue;
   
   delay(delayFor);
-//  t.update();
 }
