@@ -33,13 +33,14 @@ const int SELECT_SOUND_FONT_PIN = 9;
 //
 const int SOUND_VOLUME = 5;
 
-const int CLASH_THRESHOLD = 400;
-const int SWING_THRESHOLD = 30;
+const int CLASH_THRESHOLD = 110;
+const int SWING_THRESHOLD = 40;
 
-const int MOVEMENT_COUNT_THRESHOLD = 4;
+const int SWING_MOVEMENT_COUNT_THRESHOLD = 4;
+const int CLASH_MOVEMENT_COUNT_THRESHOLD = 4;
 
 const int DEFAULT_DELAY_FOR_SABER_OFF = 250;
-const int DEFAULT_DELAY_FOR_SABER_ON = 20;
+const int DEFAULT_DELAY_FOR_SABER_ON = 10;
 const int POWER_STATE_COUNT_THRESHOLD_WHEN_ON = 30;
 const int POWER_STATE_COUNT_THRESHOLD_WHEN_OFF = 1;
 
@@ -83,7 +84,7 @@ char str[1024];
 int currentSoundFontFolder = 0;
 int movementCount = 0;
 bool saberOn = false;
-bool playingSound = false;
+bool playingMovementSound = false;
 int powerButtonState = 0;
 int powerButtonStateCount = 0;
 int powerButtonStateCountThreshold = POWER_STATE_COUNT_THRESHOLD_WHEN_OFF;
@@ -151,33 +152,37 @@ void setupLED() {
   digitalWrite(LED_PIN, LOW);
 }
 
-bool checkDiff(int threshold, int style) {
+bool checkForMovement(int threshold, int style, int movementCountThreshold) {
   //
-  // 0 = all
-  // 1 = any
+  // 1 = all
+  // 2 = any
+  // 3 = all except Z
+  // 4 = any except Z
+  // 5 = just Z
   //
   bool movement = false;
 
-  if (style == 0) {
+  if (style == 1) {
     if (XAxisValueDiff > threshold && YAxisValueDiff > threshold && ZAxisValueDiff > threshold) { movement = true; }
-  } else if (style == 1) {
+  } else if (style == 2) {
     if (XAxisValueDiff > threshold || YAxisValueDiff > threshold || ZAxisValueDiff > threshold) { movement = true; }
+  } else if (style == 3) {
+    if (XAxisValueDiff > threshold || YAxisValueDiff > threshold) { movement = true; }
+  } else if (style == 4) {
+    if (XAxisValueDiff > threshold && YAxisValueDiff > threshold) { movement = true; }
+  } else if (style == 5) {
+    if (ZAxisValueDiff > threshold) { movement = true; }
   }
   
   if (movement) {
     movementCount++;
-    if (style == 1 || movementCount >= MOVEMENT_COUNT_THRESHOLD) { 
+    if (movementCount >= movementCountThreshold) { 
       movementCount = 0;
       return true;
     }
   }
   
   return false;
-}
-
-void resetplayingSound() {  
-  repeatHum();
-  playingSound = false;
 }
 
 void playMovementSound(int num, int d) {
@@ -187,16 +192,25 @@ void playMovementSound(int num, int d) {
   }
 
   if (PLAY_MOVEMENT_SOUNDS) {
-    playingSound = true;
+    playingMovementSound = true;
     playSound(num, 0);  
-//    t.after(d, resetplayingSound);
+//    t.after(d, resetplayingMovementSound);
     delay(d);
+    
+    resetplayingMovementSound();
   }
 }
 
+void resetplayingMovementSound() {  
+  repeatHum();
+  playingMovementSound = false;
+}
+
 void repeatHum() {
-  int num = HUM_SOUND_NUM + (SOUNDS_PER_SOUND_FONT_FOLDER * currentSoundFontFolder);
-  mp3_repeat_play(num);
+  int humSound = HUM_SOUND_NUM + (SOUNDS_PER_SOUND_FONT_FOLDER * currentSoundFontFolder);
+  mp3_stop();
+  delay(50);
+  mp3_repeat_play(humSound);
 }
 
 void processPowerButton() {
@@ -251,11 +265,11 @@ void processMovements() {
   if (YAxisValueLast > 0) { YAxisValueDiff = abs(YAxisValueLast - YAxisValue); }
   if (ZAxisValueLast > 0) { ZAxisValueDiff = abs(ZAxisValueLast - ZAxisValue); }
 
-  if (!playingSound) {
-    if (checkDiff(CLASH_THRESHOLD, 1)) {
+  if (!playingMovementSound) {
+    if (checkForMovement(CLASH_THRESHOLD, 5, CLASH_MOVEMENT_COUNT_THRESHOLD)) {
       if (!Serial.available()) { Serial.println("CLASH!"); }
       playMovementSound(CLASH_SOUND_NUM, 1060);
-    } else if (checkDiff(SWING_THRESHOLD, 0)) {
+    } else if (checkForMovement(SWING_THRESHOLD, 3, SWING_MOVEMENT_COUNT_THRESHOLD)) {
       if (!Serial.available()) { Serial.println("SWING"); }
        playMovementSound(SWING_SOUND_NUM, 600);      
     }
