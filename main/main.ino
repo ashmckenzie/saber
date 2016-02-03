@@ -38,7 +38,7 @@ const int CLASH_MOVEMENT_COUNT_THRESHOLD = 2;
 
 const int DEFAULT_DELAY_FOR_SABER_OFF = 250;
 const int DEFAULT_DELAY_FOR_SABER_ON = 10;
-const int POWER_STATE_COUNT_THRESHOLD_WHEN_ON = 30;
+const int POWER_STATE_COUNT_THRESHOLD_WHEN_ON = 120;
 const int POWER_STATE_COUNT_THRESHOLD_WHEN_OFF = 1;
 
 // TOGGLES
@@ -100,10 +100,14 @@ void selectSoundFont(int num) {
   if (PLAY_BOOT_SOUND) { playSound(BOOT_SOUND_NUM, 1890); }
 }
 
-void fireLED() {
+void fireLED(int d) {
   digitalWrite(LED_PIN, HIGH);
-  delay(500);
+  delay(d);
   digitalWrite(LED_PIN, LOW);
+}
+
+void setLED(int value) {
+  digitalWrite(LED_PIN, value);  
 }
 
 void setupSerial() {
@@ -205,7 +209,7 @@ void resetplayingMovementSound() {
 void repeatHum() {
   int humSound = HUM_SOUND_NUM + (SOUNDS_PER_SOUND_FONT_FOLDER * currentSoundFontFolder);
   mp3_stop();
-  delay(30);
+  delay(35);
   mp3_repeat_play(humSound);
 }
 
@@ -224,6 +228,7 @@ void processPowerButton() {
           mp3_stop();
         }
         if (!Serial.available()) { Serial.println("Power OFF!"); }
+        setLED(LOW);
       } else {
         // Turn ON
         saberOn = true;        
@@ -234,6 +239,7 @@ void processPowerButton() {
           repeatHum();
         }
         if (!Serial.available()) { Serial.println("Power ON!"); }
+        setLED(HIGH);
       }      
       powerButtonStateCount = 0;      
     } else {
