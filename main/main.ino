@@ -1,5 +1,6 @@
 #include <SoftwareSerial.h>
 #include <DFPlayer_Mini_Mp3.h>
+#include <EEPROM.h>
 #include "Timer.h"
 
 int XAxisValue = 0;
@@ -97,6 +98,7 @@ SoftwareSerial SerialMP3(SERIAL_RX_PIN, SERIAL_TX_PIN);
 void selectSoundFont(int num) {
   if (num >= MAX_SOUND_FONT_FOLDERS) { num = 0; }
   currentSoundFontFolder = num;
+  EEPROM.write(0, num);
   if (PLAY_BOOT_SOUND) { playSound(BOOT_SOUND_NUM, 1890); }
 }
 
@@ -125,7 +127,7 @@ void setupMP3() {
   mp3_set_EQ(5);
   delay(10);
 
-  selectSoundFont(currentSoundFontFolder);
+  selectSoundFont(EEPROM.read(0));
 }
 
 void playSound(int num, int del) {
