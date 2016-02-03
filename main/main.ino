@@ -23,22 +23,26 @@ int POWER_PIN = 8;
 
 int MP3_VOLUME = 20;
 
-const int CLASH_THRESHOLD = 100;
-const int SWING_THRESHOLD = 40;
+const int CLASH_THRESHOLD = 200;
+const int SWING_THRESHOLD = 20;
 
-const int DEFAULT_DELAY_FOR_SABER_OFF = 250;
-const int DEFAULT_DELAY_FOR_SABER_ON = 50;
+const int MOVEMENT_COUNT_THRESHOLD = 2;
+
+const int DEFAULT_DELAY_FOR_SABER_OFF = 500;
+const int DEFAULT_DELAY_FOR_SABER_ON = 10;
 const int POWER_STATE_COUNT_THRESHOLD_WHEN_ON = 30;
 const int POWER_STATE_COUNT_THRESHOLD_WHEN_OFF = 1;
 
 char str[1024];
+
+int movementCount = 0;
 
 int playBootSound = 1;
 int playPowerSounds = 1;
 int playMovementSounds = 1;
 
 int saberOn = 0;
-int playingSound = 0;
+bool playingSound = false;
 int powerButtonState = 0;
 int powerButtonStateCount = 0;
 int powerButtonStateCountThreshold = POWER_STATE_COUNT_THRESHOLD_WHEN_OFF;
@@ -48,8 +52,8 @@ int delayFor = DEFAULT_DELAY_FOR_SABER_OFF;
 // 2 - power on
 // 3 - power off
 // 4 - hum
-// advert/1 - swing
-// advert/2 - clash
+// 5 - swing
+// 6 - clash
 
 SoftwareSerial SerialMP3(4, 5); // RX, TX
 
@@ -91,18 +95,48 @@ void setupLED() {
   digitalWrite(LED_PIN, LOW);
 }
 
-bool checkDiff(int threshold) {
-  if (XAxisValueDiff > threshold && YAxisValueDiff > threshold && ZAxisValueDiff > threshold) {
-    return true;
-  } else {
-    return false;
+bool checkDiff(int threshold, int style) {
+  // 0 = all
+  // 1 = any
+  //
+  bool movement = false;
+
+  if (style == 0) {
+    if (XAxisValueDiff > threshold && YAxisValueDiff > threshold && ZAxisValueDiff > threshold) { movement = true; }
+  } else if (style == 1) {
+    if (XAxisValueDiff > threshold || YAxisValueDiff > threshold || ZAxisValueDiff > threshold) { movement = true; }
   }
+  
+  if (movement) {
+    movementCount++;
+    if (style == 1 || movementCount >= MOVEMENT_COUNT_THRESHOLD) { 
+      movementCount = 0;
+      return true;
+    }
+  }
+  
+  return false;
 }
 
-void resetplayingSound() {
-  playingSound = 0;
+void resetplayingSound() {  
+  repeatHum();
+  playingSound = false;
+}
+
+void playSound(int num) {
+  if (!Serial.available()) {
+    sprintf(str, "X=%d (%d), Y=%d (%d), Z=%d (%d)", XAxisValue, XAxisValueDiff, YAxisValue, YAxisValueDiff, ZAxisValue, ZAxisValueDiff);
+    Serial.println(str);
+  }
+  playingSound = true;
+  mp3_play_physical(num);
+}
+
+void repeatHum() {
   mp3_repeat_play(4);
 }
+
+/* ------------------------------------------------------------------------------------------------------------------------------------------------------- */
 
 void setup() {
   analogReference(EXTERNAL);
@@ -146,7 +180,7 @@ void loop() {
         if (playPowerSounds) {
           mp3_play_physical(2);
           delay(1000);
-          mp3_repeat_play(4);
+          repeatHum();
         }
       }      
       powerButtonStateCount = 0;      
@@ -165,37 +199,28 @@ void loop() {
     if (YAxisValueLast > 0) { YAxisValueDiff = abs(YAxisValueLast - YAxisValue); }
     if (ZAxisValueLast > 0) { ZAxisValueDiff = abs(ZAxisValueLast - ZAxisValue); }
   
-//    if (!Serial.available()) {
-//      sprintf(str, "X=%d (%d), Y=%d (%d), Z=%d (%d)", XAxisValue, XAxisValueDiff, YAxisValue, YAxisValueDiff, ZAxisValue, ZAxisValueDiff);
-//      sprintf(str, "X=%d, Y=%d, Z=%d", XAxisValueDiff, YAxisValueDiff, ZAxisValueDiff);
-//      Serial.println(str);
-//    }
 
-    if (playingSound == 0) {
-      if (checkDiff(CLASH_THRESHOLD)) {
+    if (!playingSound) {
+      if (checkDiff(CLASH_THRESHOLD, 1)) {
         if (!Serial.available()) { Serial.println("CLASH!"); }
         if (playMovementSounds) {
-          playingSound = 1;
-          mp3_play_physical(9);
-//          mp3_advert_play(2);
+          playSound(6);
           t.after(1060, resetplayingSound);
         }
-      } else if (checkDiff(SWING_THRESHOLD)) {
+      } else if (checkDiff(SWING_THRESHOLD, 0)) {
         if (!Serial.available()) { Serial.println("SWING"); }
         if (playMovementSounds) {
-          playingSound = 1;
-          mp3_play_physical(11);
-//          mp3_advert_play(1);
+          playSound(5);
           t.after(600, resetplayingSound);
         }
       }
-    }
-    
-    XAxisValueLast = XAxisValue;
-    YAxisValueLast = YAxisValue;
-    ZAxisValueLast = ZAxisValue;
+    }   
   }
 
-  t.update();
+  XAxisValueLast = XAxisValue;
+  YAxisValueLast = YAxisValue;
+  ZAxisValueLast = ZAxisValue;
+  
   delay(delayFor);
+  t.update();
 }
