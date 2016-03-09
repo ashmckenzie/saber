@@ -22,11 +22,11 @@ const int LED_PIN = 13;
 
 const int MP3_RX_PIN = 6;
 const int MP3_TX_PIN = 7;
+const int MP3_BUSY_PIN = 12;
 
 const int XAXIS_PIN = A0;
 const int YAXIS_PIN = A1;
 const int ZAXIS_PIN = A2;
-const int MP3_BUSY_PIN = 12;
 
 const unsigned int BUTTON_MAIN_PIN = 8;
 const unsigned int BUTTON_AUX_PIN = 9;
@@ -136,6 +136,7 @@ void selectSoundFont(unsigned int num) {
 }
 
 void repeatHum() {
+  vPrint(F("Repeating hum"));
   repeatSound(HUM_SOUND_NUM);
 }
 
@@ -143,15 +144,27 @@ void repeatSound(unsigned int num) {
   mp3_repeat_from_folder(num, currentSoundFontFolder);
 }
 
-void stopSound() {  
-  mp3_stop();
-  delay(10);
+void playSound(unsigned int num) {
+  mp3_play_from_folder(num, currentSoundFontFolder);
 }
 
-void playSound(unsigned int num) {
-  stopSound();
-  mp3_play_from_folder(num, currentSoundFontFolder);
-  delay(10);
+bool playingSound() {
+  if (digitalRead(MP3_BUSY_PIN) == 0) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
+void waitUntilSoundStopped() {
+  delay(50);
+  if (playingSound()) {
+    vPrint(F("Waiting for sound to finish.."));
+  }
+  
+  while (playingSound()) { }
+  
+  vPrint(F("Sound finished!"));
 }
 
 void setupPowerSwitch() {
@@ -302,7 +315,6 @@ void turnSaberOff() {
     vPrint(F("Powering OFF.."));
     if (PLAY_POWER_ON_OFF_SOUND) {
       playSound(POWER_OFF_SOUND_NUM);
-      stopSound();
     }
     vPrint(F("Powered OFF!"));
     setLED(LOW);
@@ -314,10 +326,11 @@ void turnSaberOn() {
     saberOn = true;
     vPrint(F("Powering ON.."));
     if (PLAY_POWER_ON_OFF_SOUND) {
-//      playSound(POWER_ON_SOUND_NUM);
+      playSound(POWER_ON_SOUND_NUM);
     }
     vPrint(F("Powered ON!"));
     setLED(HIGH);
+    waitUntilSoundStopped();
     repeatHum();
   }
 }
@@ -377,7 +390,7 @@ void setup() {
   vPrint(F("Ready!"));
 }
 
-void loop() {
+void loop() {  
   processButtonClicks();
 
 //  captureAccelerometerValues();
