@@ -41,16 +41,9 @@ const int SOUND_VOLUME = 5;
 /* ------------------------------------------------------------------------------------------------------------------------------------------------------- */
 
 #define SWING_SUPPRESS 7
-#define CLASH_SUPPRESS 7
-#define CLASH_PASSES   20
-#define BRAKE_PASSES   3
-
 #define SWING          1200
-#define CLASH_ACCEL    11000
-#define CLASH_BRAKE    2000
 
 uint8_t swingSuppress = SWING_SUPPRESS * 2;
-
 
 uint16_t packetSize;
 uint8_t fifoBuffer[64];
@@ -219,12 +212,6 @@ void playSound(unsigned int num) {
   mp3_play_from_folder(num, currentSoundFontFolder);
 }
 
-void playSoundAndThenHum(unsigned int num) {
-  mp3_play_from_folder(num, currentSoundFontFolder);
-//  waitUntilSoundStopped();
-//  repeatHum();
-}
-
 void changeSoundFont() {
   unsigned int newSoundFontFolder = 0;
   if (!saberOn) {
@@ -238,7 +225,7 @@ void changeSoundFont() {
 }
 
 void playMovementSound(unsigned int num) {
-  if (PLAY_MOVEMENT_SOUNDS) { playSoundAndThenHum(num); }
+  if (PLAY_MOVEMENT_SOUNDS) { playSound(num); }
 }
 
 void ensureHum() {
@@ -274,7 +261,7 @@ void processButtonClicks() {
 void mainButtonPress() {
   if (saberOn) {
     vPrint(F("MAIN button press!"));
-    playSoundAndThenHum(CLASH_SOUND_NUM);
+    playSound(CLASH_SOUND_NUM);
   } else {
     turnSaberOn();    
   }
@@ -287,7 +274,7 @@ void mainButtonLongPress() {
 void auxButtonPress() {
   if (saberOn) {
     vPrint(F("AUX button press!"));
-    playSoundAndThenHum(SWING_SOUND_NUM);
+    playSound(SWING_SOUND_NUM);
   } else {
     vPrint(F("Changing sound font.."));
     changeSoundFont();
@@ -312,27 +299,7 @@ void processMovements() {
 }
 
 inline void dmpDataReady() {
-  mpuInterrupt = true;
-}
-
-inline void printQuaternion(Quaternion quaternion, long multiplier) {
-  Serial.print(F("\t\tQ\t\tw="));
-  Serial.print(quaternion.w * multiplier);
-  Serial.print(F("\t\tx="));
-  Serial.print(quaternion.x * multiplier);
-  Serial.print(F("\t\ty="));
-  Serial.print(quaternion.y * multiplier);
-  Serial.print(F("\t\tz="));
-  Serial.println(quaternion.z * multiplier);
-} //printQuaternion
-
-inline void printAcceleration(VectorInt16 aaWorld) {
-  Serial.print(F("\t\tA\t\tx="));
-  Serial.print(aaWorld.x);
-  Serial.print(F("\t\ty="));
-  Serial.print(aaWorld.y);
-  Serial.print(F("\t\tz="));
-  Serial.print(aaWorld.z);
+  if (saberOn) { mpuInterrupt = true; }
 }
 
 void captureAccelerometerValues() {
@@ -367,9 +334,6 @@ void captureAccelerometerValues() {
     mpu.dmpGetLinearAccel(&aaReal, &aa, &gravity);
     mpu.dmpGetLinearAccelInWorld(&aaWorld, &aaReal, &quaternion_reading);
 
-//    printQuaternion(quaternion, multiplier);
-//    printAcceleration(aaWorld);
-
     quaternion.w = quaternion_reading.w * multiplier - quaternion_last.w * multiplier;
     quaternion.x = quaternion_reading.x * multiplier - quaternion_last.x * multiplier;
     quaternion.y = quaternion_reading.y * multiplier - quaternion_last.y * multiplier;
@@ -381,9 +345,9 @@ void captureAccelerometerValues() {
 
 bool swingDetected() {
   if (abs(quaternion.w) > SWING and !swingSuppress
-      and aaWorld.x < 0
-      and abs(quaternion.x) < (9 / 2) * SWING
-      and (abs(quaternion.z) > 3 * SWING
+      and aaWorld.z < 0
+      and abs(quaternion.z) < (9 / 2) * SWING
+      and (abs(quaternion.x) > 3 * SWING
           or abs(quaternion.y) > 3 * SWING)
      ) {
        return true;
@@ -411,7 +375,7 @@ void turnSaberOff() {
 void turnSaberOn() {
   if (!saberOn) {
     vPrint(F("Powering ON.."));
-    if (PLAY_POWER_ON_OFF_SOUND) { playSoundAndThenHum(POWER_ON_SOUND_NUM); }
+    if (PLAY_POWER_ON_OFF_SOUND) { playSound(POWER_ON_SOUND_NUM); }
     vPrint(F("Powered ON!"));
     setLED(HIGH);
     saberOn = true;
@@ -430,7 +394,7 @@ void setup() {
   setupMP3();
   setupAccelerometer();
 
-//  t.every(250, ensureHum);
+  t.every(100, ensureHum);
 //  t.every(100, processButtonClicks);
 
   vPrint(F("Ready!"));
