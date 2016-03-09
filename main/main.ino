@@ -1,104 +1,88 @@
+#include <Arduino.h>
+
 #include <SoftwareSerial.h>
 #include <DFPlayer_Mini_Mp3.h>
-#include <EEPROM.h>
 
-int XAxisValue = 0;
-int YAxisValue = 0;
-int ZAxisValue = 0;
-int XAxisValueLast = 0;
-int YAxisValueLast = 0;
-int ZAxisValueLast = 0;
-int XAxisValueDiff = 0;
-int YAxisValueDiff = 0;
-int ZAxisValueDiff = 0;
+#include <OneButton.h>
+#include <EEPROM.h>
+//
+//unsigned int XAxisValue = 0;
+//unsigned int YAxisValue = 0;
+//unsigned int ZAxisValue = 0;
+//unsigned int XAxisValueLast = 0;
+//unsigned int YAxisValueLast = 0;
+//unsigned int ZAxisValueLast = 0;
+//unsigned int XAxisValueDiff = 0;
+//unsigned int YAxisValueDiff = 0;
+//unsigned int ZAxisValueDiff = 0;
 
 // PINS
 //
 const int LED_PIN = 13;
-const int SERIAL_RX_PIN = 4;
-const int SERIAL_TX_PIN = 5;
+
+const int MP3_RX_PIN = 6;
+const int MP3_TX_PIN = 7;
+
 const int XAXIS_PIN = A0;
 const int YAXIS_PIN = A1;
 const int ZAXIS_PIN = A2;
 const int MP3_BUSY_PIN = 12;
-const int POWER_ON_OFF_PIN = 8;
-const int SELECT_SOUND_FONT_PIN = 9;
+
+const unsigned int BUTTON_MAIN_PIN = 8;
+const unsigned int BUTTON_AUX_PIN = 9;
+
+OneButton buttonMain(BUTTON_MAIN_PIN, true);
+OneButton buttonAux(BUTTON_AUX_PIN, true);
 
 /* ------------------------------------------------------------------------------------------------------------------------------------------------------- */
 
 // TUNABLES
 //
-const int SOUND_VOLUME = 5;
+const int SOUND_VOLUME = 20;
+ 
+const unsigned int SWING_THRESHOLD = 80;
+const unsigned int SWING_MOVEMENT_COUNT_THRESHOLD = 2;
 
-const int SWING_THRESHOLD = 25;
-const int SWING_MOVEMENT_COUNT_THRESHOLD = 3;
+const unsigned int CLASH_THRESHOLD = 200;
+const unsigned int CLASH_MOVEMENT_COUNT_THRESHOLD = 2;
 
-const int CLASH_THRESHOLD = 45;
-const int CLASH_MOVEMENT_COUNT_THRESHOLD = 2;
-
-const int DEFAULT_DELAY_FOR_SABER_OFF = 250;
-const int DEFAULT_DELAY_FOR_SABER_ON = 10;
-const int POWER_STATE_COUNT_THRESHOLD_WHEN_ON = 120;
-const int POWER_STATE_COUNT_THRESHOLD_WHEN_OFF = 1;
+//const unsigned int DEFAULT_DELAY_FOR_SABER_OFF = 250;
+//const unsigned int DEFAULT_DELAY_FOR_SABER_ON = 100;
+const unsigned int DEFAULT_DELAY_FOR_SABER_OFF = 10;
+const unsigned int DEFAULT_DELAY_FOR_SABER_ON = 10;
 
 // TOGGLES
 //
+const bool DEBUG = true;
+
 const bool PLAY_BOOT_SOUND = true;
 const bool PLAY_POWER_ON_OFF_SOUND = true;
 const bool PLAY_MOVEMENT_SOUNDS = true;
 
 /* ------------------------------------------------------------------------------------------------------------------------------------------------------- */
 
-// Black Star
-//
-// 1 - boot
-// 2 - power on
-// 3 - power off
-// 4 - hum
-// 5 - swing
-// 6 - clash
+const unsigned int SOUND_FONT_MIN = 2;
+const unsigned int SOUND_FONT_MAX = 4;
 
-// EP VI
-//
-// 7  - boot
-// 8  - power on
-// 9  - power off
-// 10 - hum
-// 11 - swing
-// 12 - clash
-
-const int MAX_SOUND_FONT_FOLDERS = 2;
-const int SOUNDS_PER_SOUND_FONT_FOLDER = 6;
-const int BOOT_SOUND_NUM = 1;
-const int POWER_ON_SOUND_NUM = 2;
-const int POWER_OFF_SOUND_NUM = 3;
-const int HUM_SOUND_NUM = 4;
-const int SWING_SOUND_NUM = 5;
-const int CLASH_SOUND_NUM = 6;
+const unsigned int BOOT_SOUND_NUM = 1;
+const unsigned int POWER_ON_SOUND_NUM = 2;
+const unsigned int POWER_OFF_SOUND_NUM = 3;
+const unsigned int HUM_SOUND_NUM = 4;
+const unsigned int SWING_SOUND_NUM = 5;
+const unsigned int CLASH_SOUND_NUM = 6;
 
 char str[1024];
 
-int currentSoundFontFolder = 0;
-int movementCount = 0;
+unsigned int currentSoundFontFolder = 2;
+unsigned int movementCount = 0;
+
 bool saberOn = false;
 bool playingMovementSound = false;
-int powerButtonState = 0;
-int powerButtonStateCount = 0;
-int powerButtonStateCountThreshold = POWER_STATE_COUNT_THRESHOLD_WHEN_OFF;
-int delayFor = DEFAULT_DELAY_FOR_SABER_OFF;
+unsigned int delayFor = DEFAULT_DELAY_FOR_SABER_OFF;
 
-int selectSoundFontButtonState = 0;
-int selectSoundFontButtonStateCount = 0;
-int selectSoundFontButtonStateCountThreshold = 6;
+SoftwareSerial SerialMP3(MP3_RX_PIN, MP3_TX_PIN);
 
-SoftwareSerial SerialMP3(SERIAL_RX_PIN, SERIAL_TX_PIN);
-
-void selectSoundFont(int num) {
-  if (num >= MAX_SOUND_FONT_FOLDERS) { num = 0; }
-  currentSoundFontFolder = num;
-  EEPROM.write(0, num);
-  if (PLAY_BOOT_SOUND) { playSound(BOOT_SOUND_NUM, 1890); }
-}
+/* ------------------------------------------------------------------------------------------------------------------------------------------------------- */
 
 void fireLED(int d) {
   digitalWrite(LED_PIN, HIGH);
@@ -114,38 +98,99 @@ void setupSerial() {
   Serial.begin(115200);
 }
 
-void setupMP3() {
-  pinMode(MP3_BUSY_PIN, INPUT);
-  SerialMP3.begin(9600);
-  mp3_set_serial(SerialMP3);
-  delay(10);
-  
-  mp3_set_device(1);
-  delay(10);
-  
-  mp3_set_volume(SOUND_VOLUME);
-  delay(10);
-  
-  mp3_set_EQ(5);
-  delay(10);
-
-  selectSoundFont(EEPROM.read(0));
+void setupAccelerometer() {
+//  analogReference(EXTERNAL);
 }
 
-void playSound(int num, int del) {
-  num = num + (SOUNDS_PER_SOUND_FONT_FOLDER * currentSoundFontFolder);
-  mp3_play_physical(num);
-  if (del > 0) { delay(del); }
+void setupMP3() {
+  unsigned int currentSoundFont = 2;
+  
+  pinMode(MP3_BUSY_PIN, INPUT);
+
+  SerialMP3.begin(9600);
+  
+  mp3_set_serial(SerialMP3);
+  delay(10); 
+  
+  mp3_set_volume(SOUND_VOLUME); 
+  delay(10);
+  
+//  mp3_set_EQ(5);
+//  delay(10);
+
+  currentSoundFont = EEPROM.read(0);
+
+  if (currentSoundFont == 0) {
+    currentSoundFont = SOUND_FONT_MIN;
+  }
+
+  selectSoundFont(currentSoundFont);
+}
+
+void selectSoundFont(unsigned int num) {
+  currentSoundFontFolder = num;
+  EEPROM.write(0, num);
+  if (PLAY_BOOT_SOUND) { 
+    playSound(BOOT_SOUND_NUM);
+  }
+}
+
+void repeatHum() {
+  repeatSound(HUM_SOUND_NUM);
+}
+
+void repeatSound(unsigned int num) {
+  mp3_repeat_from_folder(num, currentSoundFontFolder);
+}
+
+void stopSound() {  
+  mp3_stop();
+  delay(10);
+}
+
+void playSound(unsigned int num) {
+  stopSound();
+  mp3_play_from_folder(num, currentSoundFontFolder);
+  delay(10);
 }
 
 void setupPowerSwitch() {
-  pinMode(POWER_ON_OFF_PIN, INPUT);
-  digitalWrite(POWER_ON_OFF_PIN, HIGH);
+  buttonMain.attachClick(mainButtonPress);
+  buttonMain.attachLongPressStart(mainButtonLongPress);
 }
 
-void setupChangeSoundFontSwitch() {
-  pinMode(SELECT_SOUND_FONT_PIN, INPUT);
-  digitalWrite(SELECT_SOUND_FONT_PIN, HIGH);
+void mainButtonPress() {
+  if (saberOn) {
+    vPrint(F("MAIN button press!"));
+  } else {
+    turnSaberOn();    
+  }
+}
+
+void mainButtonLongPress() {
+  turnSaberOff();
+}
+
+void setupAuxSwitch() {
+  buttonAux.attachClick(auxButtonPress);
+  buttonAux.attachLongPressStart(auxButtonLongPress);
+}
+
+void auxButtonPress() {
+  if (saberOn) {
+    vPrint(F("AUX button press!"));
+  } else {
+    vPrint(F("Changing sound font.."));
+    changeSoundFont();
+  }
+}
+
+void auxButtonLongPress() {
+  enterConfigMode();
+}
+
+void enterConfigMode() {
+  vPrint(F("Entering config mode!"));
 }
 
 void setupLED() {
@@ -153,168 +198,197 @@ void setupLED() {
   digitalWrite(LED_PIN, LOW);
 }
 
-bool checkForMovement(int threshold, int style, int movementCountThreshold) {
-  //
-  // 1 = all
-  // 2 = any
-  // 3 = all except Z
-  // 4 = any except Z
-  // 5 = just Z
-  //
-  bool movement = false;
+//bool swingDetected() {
+////  checkForMovement(SWING_THRESHOLD, 1, SWING_MOVEMENT_COUNT_THRESHOLD)
+//
+//  bool movement = false;
+//
+//  if (XAxisValueDiff > SWING_THRESHOLD) { movement = true; }
+//
+//  if (movement) {
+//    movementCount++;
+//    if (movementCount >= SWING_MOVEMENT_COUNT_THRESHOLD) { 
+//      movementCount = 0;
+//      return true;
+//    }
+//  }
+//  
+//  return false;
+//}
 
-  if (style == 1) {
-    if (XAxisValueDiff > threshold && YAxisValueDiff > threshold && ZAxisValueDiff > threshold) { movement = true; }
-  } else if (style == 2) {
-    if (XAxisValueDiff > threshold || YAxisValueDiff > threshold || ZAxisValueDiff > threshold) { movement = true; }
-  } else if (style == 3) {
-    if (XAxisValueDiff > threshold || YAxisValueDiff > threshold) { movement = true; }
-  } else if (style == 4) {
-    if (XAxisValueDiff > threshold && YAxisValueDiff > threshold) { movement = true; }
-  } else if (style == 5) {
-    if (ZAxisValueDiff > threshold) { movement = true; }
-  }
-  
-  if (movement) {
-    movementCount++;
-    if (movementCount >= movementCountThreshold) { 
-      movementCount = 0;
-      return true;
+//bool clashDetected() {
+////  if (checkForMovement(CLASH_THRESHOLD, 1, CLASH_MOVEMENT_COUNT_THRESHOLD)) {
+//
+//  bool movement = false;
+//
+//  if (XAxisValueDiff > CLASH_THRESHOLD && YAxisValueDiff > CLASH_THRESHOLD) { movement = true; }
+//
+//  if (movement) {
+//    movementCount++;
+//    if (movementCount >= CLASH_MOVEMENT_COUNT_THRESHOLD) { 
+//      movementCount = 0;
+//      return true;
+//    }
+//  }
+//  
+//  return false;
+//}
+
+//bool checkForMovement(int threshold, int style, int movementCountThreshold) {
+//  //
+//  // 1 = all
+//  // 2 = any
+//  // 3 = all except Z
+//  // 4 = any except Z
+//  // 5 = just Z
+//  //
+//  bool movement = false;
+//
+//  if (style == 1) {
+//    if (XAxisValueDiff > threshold && YAxisValueDiff > threshold && ZAxisValueDiff > threshold) { movement = true; }
+//  } else if (style == 2) {
+//    if (XAxisValueDiff > threshold || YAxisValueDiff > threshold || ZAxisValueDiff > threshold) { movement = true; }
+//  } else if (style == 3) {
+//    if (XAxisValueDiff > threshold || YAxisValueDiff > threshold) { movement = true; }
+//  } else if (style == 4) {
+//    if (XAxisValueDiff > threshold && YAxisValueDiff > threshold) { movement = true; }
+//  } else if (style == 5) {
+//    if (ZAxisValueDiff > threshold) { movement = true; }
+//  }
+//  
+//  if (movement) {
+//    movementCount++;
+//    if (movementCount >= movementCountThreshold) { 
+//      movementCount = 0;
+//      return true;
+//    }
+//  }
+//  
+//  return false;
+//}
+
+void changeSoundFont() {
+  unsigned int newSoundFontFolder = 0;
+  if (!saberOn) {
+    if (currentSoundFontFolder == SOUND_FONT_MAX) {
+      newSoundFontFolder = SOUND_FONT_MIN;
+    } else {
+      newSoundFontFolder = currentSoundFontFolder + 1;
     }
+    selectSoundFont(newSoundFontFolder);
   }
-  
-  return false;
 }
 
-void playMovementSound(int num, int d) {
-  if (!Serial.available()) {
-    sprintf(str, "X=%d (%d), Y=%d (%d), Z=%d (%d)", XAxisValue, XAxisValueDiff, YAxisValue, YAxisValueDiff, ZAxisValue, ZAxisValueDiff);
-    Serial.println(str);
-  }
+void playMovementSound(unsigned int num) {
+//  sprintf(str, "X=%d (%d), Y=%d (%d), Z=%d (%d)", XAxisValue, XAxisValueDiff, YAxisValue, YAxisValueDiff, ZAxisValue, ZAxisValueDiff);
+//  vPrint(str);
 
   if (PLAY_MOVEMENT_SOUNDS) {
     playingMovementSound = true;
-    playSound(num, 0);  
-    delay(d);
+    playSound(num);  
     
-    resetplayingMovementSound();
+    resetPlayingMovementSound();
   }
 }
 
-void resetplayingMovementSound() {  
+void resetPlayingMovementSound() {  
   repeatHum();
   playingMovementSound = false;
 }
 
-void repeatHum() {
-  int humSound = HUM_SOUND_NUM + (SOUNDS_PER_SOUND_FONT_FOLDER * currentSoundFontFolder);
-  mp3_stop();
-  delay(35);
-  mp3_repeat_play(humSound);
-}
-
-void processPowerButton() {
-  powerButtonState = digitalRead(POWER_ON_OFF_PIN);
-
-  if (!powerButtonState) {
-    if (powerButtonStateCount >= powerButtonStateCountThreshold) {      
-      if (saberOn) {
-        // Turn OFF
-        saberOn = false;
-        delayFor = DEFAULT_DELAY_FOR_SABER_OFF;
-        powerButtonStateCountThreshold = POWER_STATE_COUNT_THRESHOLD_WHEN_OFF;
-        if (PLAY_POWER_ON_OFF_SOUND) {
-          playSound(POWER_OFF_SOUND_NUM, 1000);
-          mp3_stop();
-        }
-        if (!Serial.available()) { Serial.println("Power OFF!"); }
-        setLED(LOW);
-      } else {
-        // Turn ON
-        saberOn = true;        
-        delayFor = DEFAULT_DELAY_FOR_SABER_ON;
-        powerButtonStateCountThreshold = POWER_STATE_COUNT_THRESHOLD_WHEN_ON;        
-        if (PLAY_POWER_ON_OFF_SOUND) {
-          playSound(POWER_ON_SOUND_NUM, 1000);
-          repeatHum();
-        }
-        if (!Serial.available()) { Serial.println("Power ON!"); }
-        setLED(HIGH);
-      }      
-      powerButtonStateCount = 0;      
-    } else {
-      powerButtonStateCount++;
+void turnSaberOff() {
+  if (saberOn) {
+    saberOn = false;
+    vPrint(F("Powering OFF.."));
+    if (PLAY_POWER_ON_OFF_SOUND) {
+      playSound(POWER_OFF_SOUND_NUM);
+      stopSound();
     }
+    vPrint(F("Powered OFF!"));
+    setLED(LOW);
   }
 }
 
-void processChangeSoundFont() {
-  selectSoundFontButtonState = digitalRead(SELECT_SOUND_FONT_PIN);
-
-  if (!selectSoundFontButtonState) {
-    if (selectSoundFontButtonStateCount >= selectSoundFontButtonStateCountThreshold) {      
-      if (!Serial.available()) { Serial.println("Changing sound font!"); }
-      selectSoundFont(currentSoundFontFolder + 1);
-      selectSoundFontButtonStateCount = 0;      
-    } else {
-      selectSoundFontButtonStateCount++;
+void turnSaberOn() {
+  if (!saberOn) {
+    saberOn = true;
+    vPrint(F("Powering ON.."));
+    if (PLAY_POWER_ON_OFF_SOUND) {
+//      playSound(POWER_ON_SOUND_NUM);
     }
+    vPrint(F("Powered ON!"));
+    setLED(HIGH);
+    repeatHum();
   }
 }
 
-void processMovements() {      
-  if (XAxisValueLast > 0) { XAxisValueDiff = abs(XAxisValueLast - XAxisValue); }
-  if (YAxisValueLast > 0) { YAxisValueDiff = abs(YAxisValueLast - YAxisValue); }
-  if (ZAxisValueLast > 0) { ZAxisValueDiff = abs(ZAxisValueLast - ZAxisValue); }
+//void processMovements() {      
+//  if (XAxisValueLast > 0) { XAxisValueDiff = abs(XAxisValueLast - XAxisValue); }
+//  if (YAxisValueLast > 0) { YAxisValueDiff = abs(YAxisValueLast - YAxisValue); }
+//  if (ZAxisValueLast > 0) { ZAxisValueDiff = abs(ZAxisValueLast - ZAxisValue); }
+//
+////  sprintf(str, "X=%d (%d), Y=%d (%d), Z=%d (%d)", XAxisValue, XAxisValueDiff, YAxisValue, YAxisValueDiff, ZAxisValue, ZAxisValueDiff);
+////  dPrint(str);
+//  
+//  if (!playingMovementSound) {
+////    if (clashDetected()) {
+////      vPrint("CLASH!");
+//////      playMovementSound(CLASH_SOUND_NUM);
+////      playMovementSound(CLASH_SOUND_NUM);
+////    } else 
+//    if (swingDetected()) {
+//      vPrint("SWING");
+//      playMovementSound(SWING_SOUND_NUM);
+//    }
+//  }
+//}
 
-  if (!playingMovementSound) {
-    if (checkForMovement(CLASH_THRESHOLD, 1, CLASH_MOVEMENT_COUNT_THRESHOLD)) {
-      if (!Serial.available()) { Serial.println("CLASH!"); }
-      playMovementSound(CLASH_SOUND_NUM, 1060);
-    } else if (checkForMovement(SWING_THRESHOLD, 1, SWING_MOVEMENT_COUNT_THRESHOLD)) {
-      if (!Serial.available()) { Serial.println("SWING"); }
-       playMovementSound(SWING_SOUND_NUM, 600);      
-    }
-  }   
+void processButtonClicks() {
+  buttonMain.tick();
+  buttonAux.tick();
 }
 
-void captureAccelerometerValues() {
-  XAxisValue = analogRead(XAXIS_PIN);
-  YAxisValue = analogRead(YAXIS_PIN);
-  ZAxisValue = analogRead(ZAXIS_PIN);
+//void captureAccelerometerValues() {
+//  XAxisValue = analogRead(XAXIS_PIN);
+//  YAxisValue = analogRead(YAXIS_PIN);
+//  ZAxisValue = analogRead(ZAXIS_PIN);
+//}
+
+void vPrint(const __FlashStringHelper *str) {
+  if (!Serial.available()) { Serial.println(str); }
+}
+
+void dPrint(const __FlashStringHelper *str) {
+  if (DEBUG) { vPrint(str); }
 }
 
 /* ------------------------------------------------------------------------------------------------------------------------------------------------------- */
 
 void setup() {
-  analogReference(EXTERNAL);
-  
   setupSerial();
-
-  if (!Serial.available()) { Serial.println("Starting up.."); }
+  vPrint(F("Starting up.."));
 
   setupLED();
-  setupPowerSwitch();
-  setupChangeSoundFontSwitch();
   setupMP3();
+//  setupAccelerometer();
+  setupPowerSwitch();
+  setupAuxSwitch();
 
-  if (!Serial.available()) { Serial.println("Ready!"); }
+  vPrint(F("Ready!"));
 }
 
 void loop() {
-  captureAccelerometerValues();
+  processButtonClicks();
 
-  processPowerButton();
+//  captureAccelerometerValues();
   
-  if (saberOn) {
-    processMovements();
-  } else {
-    processChangeSoundFont();  
-  }
-
-  XAxisValueLast = XAxisValue;
-  YAxisValueLast = YAxisValue;
-  ZAxisValueLast = ZAxisValue;
+//  if (saberOn) {
+//    processMovements();
+//  }
+//
+//  XAxisValueLast = XAxisValue;
+//  YAxisValueLast = YAxisValue;
+//  ZAxisValueLast = ZAxisValue;
   
   delay(delayFor);
 }
