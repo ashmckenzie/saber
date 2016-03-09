@@ -5,7 +5,11 @@
 
 #include <OneButton.h>
 #include <EEPROM.h>
-//
+
+#include <Timer.h>
+
+Timer t;
+
 //unsigned int XAxisValue = 0;
 //unsigned int YAxisValue = 0;
 //unsigned int ZAxisValue = 0;
@@ -46,8 +50,6 @@ const unsigned int SWING_MOVEMENT_COUNT_THRESHOLD = 2;
 const unsigned int CLASH_THRESHOLD = 200;
 const unsigned int CLASH_MOVEMENT_COUNT_THRESHOLD = 2;
 
-//const unsigned int DEFAULT_DELAY_FOR_SABER_OFF = 250;
-//const unsigned int DEFAULT_DELAY_FOR_SABER_ON = 100;
 const unsigned int DEFAULT_DELAY_FOR_SABER_OFF = 10;
 const unsigned int DEFAULT_DELAY_FOR_SABER_ON = 10;
 
@@ -82,6 +84,8 @@ unsigned int delayFor = DEFAULT_DELAY_FOR_SABER_OFF;
 
 SoftwareSerial SerialMP3(MP3_RX_PIN, MP3_TX_PIN);
 
+unsigned int soundPlaying = 0;
+
 /* ------------------------------------------------------------------------------------------------------------------------------------------------------- */
 
 void fireLED(int d) {
@@ -115,8 +119,8 @@ void setupMP3() {
   mp3_set_volume(SOUND_VOLUME); 
   delay(10);
   
-//  mp3_set_EQ(5);
-//  delay(10);
+  mp3_set_EQ(5);
+  delay(10);
 
   currentSoundFont = EEPROM.read(0);
 
@@ -148,7 +152,13 @@ void playSound(unsigned int num) {
   mp3_play_from_folder(num, currentSoundFontFolder);
 }
 
-bool playingSound() {
+void playSoundAndThenHum(unsigned int num) {
+  mp3_play_from_folder(num, currentSoundFontFolder);
+//  waitUntilSoundStopped();
+//  repeatHum();
+}
+
+bool isSoundPlaying() {
   if (digitalRead(MP3_BUSY_PIN) == 0) {
     return true;
   } else {
@@ -157,12 +167,12 @@ bool playingSound() {
 }
 
 void waitUntilSoundStopped() {
-  delay(100);
-  if (playingSound()) {
+  delay(150);
+  if (isSoundPlaying()) {
     vPrint(F("Waiting for sound to finish.."));
   }
   
-  while (playingSound()) { }
+  while (isSoundPlaying()) { }
   
   vPrint(F("Sound finished!"));
 }
@@ -175,6 +185,7 @@ void setupPowerSwitch() {
 void mainButtonPress() {
   if (saberOn) {
     vPrint(F("MAIN button press!"));
+    playSoundAndThenHum(CLASH_SOUND_NUM);
   } else {
     turnSaberOn();    
   }
@@ -192,6 +203,7 @@ void setupAuxSwitch() {
 void auxButtonPress() {
   if (saberOn) {
     vPrint(F("AUX button press!"));
+    playSoundAndThenHum(SWING_SOUND_NUM);
   } else {
     vPrint(F("Changing sound font.."));
     changeSoundFont();
@@ -314,6 +326,8 @@ void turnSaberOff() {
     saberOn = false;
     vPrint(F("Powering OFF.."));
     if (PLAY_POWER_ON_OFF_SOUND) {
+      mp3_stop();
+      delay(10);
       playSound(POWER_OFF_SOUND_NUM);
     }
     vPrint(F("Powered OFF!"));
@@ -326,12 +340,10 @@ void turnSaberOn() {
     saberOn = true;
     vPrint(F("Powering ON.."));
     if (PLAY_POWER_ON_OFF_SOUND) {
-      playSound(POWER_ON_SOUND_NUM);
+      playSoundAndThenHum(POWER_ON_SOUND_NUM);
     }
     vPrint(F("Powered ON!"));
-    setLED(HIGH);
-    waitUntilSoundStopped();
-    repeatHum();
+    setLED(HIGH);    
   }
 }
 
@@ -375,6 +387,10 @@ void dPrint(const __FlashStringHelper *str) {
   if (DEBUG) { vPrint(str); }
 }
 
+void ensureHum() {
+  if (saberOn && !isSoundPlaying()) { repeatHum(); }
+}
+
 /* ------------------------------------------------------------------------------------------------------------------------------------------------------- */
 
 void setup() {
@@ -387,10 +403,12 @@ void setup() {
   setupPowerSwitch();
   setupAuxSwitch();
 
+  t.every(250, ensureHum);
+
   vPrint(F("Ready!"));
 }
 
-void loop() {  
+void loop() { 
   processButtonClicks();
 
 //  captureAccelerometerValues();
@@ -403,5 +421,7 @@ void loop() {
 //  YAxisValueLast = YAxisValue;
 //  ZAxisValueLast = ZAxisValue;
   
-  delay(delayFor);
+//  delay(delayFor);
+
+  t.update();
 }
