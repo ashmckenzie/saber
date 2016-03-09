@@ -194,9 +194,7 @@ void dPrint(const __FlashStringHelper *str) {
 void selectSoundFont(unsigned int num) {
   currentSoundFontFolder = num;
   EEPROM.write(0, num);
-  if (PLAY_BOOT_SOUND) { 
-    playSound(BOOT_SOUND_NUM);
-  }
+  if (PLAY_BOOT_SOUND) { playSound(BOOT_SOUND_NUM); }
 }
 
 void repeatHum() {
@@ -206,6 +204,7 @@ void repeatHum() {
 
 void repeatSound(unsigned int num) {
   mp3_repeat_from_folder(num, currentSoundFontFolder);
+  delay(10);
 }
 
 void playSound(unsigned int num) {
@@ -233,7 +232,7 @@ void ensureHum() {
 }
 
 bool isSoundPlaying() {
-  if (digitalRead(MP3_BUSY_PIN) == 0) {
+  if (digitalRead(MP3_BUSY_PIN) != 1) {
     return true;
   } else {
     return false;
@@ -241,14 +240,8 @@ bool isSoundPlaying() {
 }
 
 void waitUntilSoundStopped() {
-  delay(150);
-  if (isSoundPlaying()) {
-    vPrint(F("Waiting for sound to finish.."));
-  }
-  
-  while (isSoundPlaying()) { }
-  
-  vPrint(F("Sound finished!"));
+  delay(100);
+  while (isSoundPlaying()) { delay(100); }
 }
 
 /* ------------------------------------------------------------------------------------------------------------------------------------------------------- */
@@ -392,9 +385,9 @@ void setup() {
   setupPowerSwitch();
   setupAuxSwitch();
   setupMP3();
-  setupAccelerometer();
+//  setupAccelerometer();
 
-  t.every(100, ensureHum);
+  t.every(200, ensureHum);
 //  t.every(100, processButtonClicks);
 
   vPrint(F("Ready!"));
@@ -404,8 +397,8 @@ void loop() {
   processButtonClicks();
   
   if (saberOn) {
-    captureAccelerometerValues();
-    processMovements();
+//    captureAccelerometerValues();
+//    processMovements();
   }
 
   t.update();
