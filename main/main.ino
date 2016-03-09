@@ -157,7 +157,7 @@ bool playingSound() {
 }
 
 void waitUntilSoundStopped() {
-  delay(50);
+  delay(100);
   if (playingSound()) {
     vPrint(F("Waiting for sound to finish.."));
   }
